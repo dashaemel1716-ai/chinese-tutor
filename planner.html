@@ -109,6 +109,8 @@
   .pickbtn{border:1.5px solid var(--line);background:var(--surface-2);border-radius:11px;padding:7px 13px;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:.15s;}
   .pickbtn.active{background:var(--rose);border-color:var(--rose);color:#fff;}
   .pickbtn.pay.active{background:var(--gold);border-color:var(--gold);}
+  .pickbtn.cash.active{background:#3aa66a;border-color:#3aa66a;}
+  .pickbtn.inc.active{background:var(--sage);border-color:var(--sage);}
 
   /* ---------- deposit (вклад) ---------- */
   .deposit-bal{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(135deg,#d8b878,#c8a96a);border-radius:16px;padding:13px 16px;color:#fff;box-shadow:var(--shadow-sm);}
@@ -258,6 +260,38 @@
       <div class="sumcell out"><div class="lbl">Потрачено всего</div><div class="val" id="sum-out">0 ₽</div></div>
     </div>
 
+    <div class="card">
+      <div class="card-head">
+        <span class="dot" style="background:#3aa66a"></span>
+        <h2>Деньги на картах</h2>
+      </div>
+      <p class="seedhint" style="margin:-2px 0 12px">Сколько сейчас лежит на карте (обновляется после пополнения).</p>
+      <div class="balances">
+        <div class="bal bal-t">
+          <div class="bank">Тинькофф</div>
+          <div class="sub">на карте</div>
+          <input class="editamt" id="cash-t" inputmode="numeric" placeholder="0">
+          <svg class="flo" viewBox="0 0 60 60"></svg>
+        </div>
+        <div class="bal bal-s">
+          <div class="bank">Сбербанк</div>
+          <div class="sub">на карте</div>
+          <input class="editamt" id="cash-s" inputmode="numeric" placeholder="0">
+          <svg class="flo" viewBox="0 0 60 60"></svg>
+        </div>
+      </div>
+      <p class="seedhint" style="margin:14px 0 7px">Пополнить карту</p>
+      <div class="addmoney">
+        <input class="amt-in" id="cashin-amount" inputmode="numeric" placeholder="сумма" style="flex:1">
+        <button class="addbtn green" data-add="cashin">+</button>
+      </div>
+      <div class="cardpick">
+        <span>Какую карту:</span>
+        <button class="pickbtn cash active" data-cash="t">Тинькофф</button>
+        <button class="pickbtn cash" data-cash="s">Сбербанк</button>
+      </div>
+    </div>
+
     <div class="card" id="deposit-card">
       <div class="card-head">
         <span class="dot" style="background:var(--gold)"></span>
@@ -299,6 +333,11 @@
         <input class="lbl-in" id="income-label" placeholder="Откуда (напр. зарплата)" maxlength="40">
         <input class="amt-in" id="income-amount" inputmode="numeric" placeholder="сумма">
         <button class="addbtn green" data-add="income">+</button>
+      </div>
+      <div class="cardpick">
+        <span>Зачислить на:</span>
+        <button class="pickbtn inc active" data-inc="t">Тинькофф</button>
+        <button class="pickbtn inc" data-inc="s">Сбербанк</button>
       </div>
     </div>
 
@@ -401,6 +440,7 @@ const DEFAULT = {
   ],
   limits: {t:110000, s:35000},
   spent:  {t:0, s:0},
+  cash:   {t:0, s:0},
   deposit: 0,
   transfers: [],
   income: [
@@ -466,7 +506,7 @@ function merge(def, got){
   for(const k in got){
     if(got[k]==null) continue;
     // вложенные объекты дополняем поверх значений по умолчанию
-    if(['limits','spent','cats'].includes(k) && typeof got[k]==='object' && !Array.isArray(got[k]))
+    if(['limits','spent','cash','cats'].includes(k) && typeof got[k]==='object' && !Array.isArray(got[k]))
       out[k]={...out[k], ...got[k]};
     else
       out[k]=got[k];
@@ -549,11 +589,15 @@ function renderMoneyList(arr, container, type, countEl){
       const sc = SPEND_CATS.find(c=>c.id===item.cat);
       if(sc) tags+=`<span class="mcard" style="color:#fff;background:${sc.color}">${sc.name}</span>`;
     }
+    if(type==='income' && item.card){
+      tags+=`<span class="mcard" style="color:#fff;background:var(--sage)">${item.card==='t'?'Тинькофф':'Сбербанк'}</span>`;
+    }
     row.innerHTML=`<span class="mtxt">${esc(item.label)}${tags}</span>
       <span class="mamt">${sign}${fmt(item.amount)}</span>
       <button class="del">×</button>`;
     row.querySelector('.del').onclick=()=>{
       if(type==='expense' && item.card) data.spent[item.card]=Math.max(0,(Number(data.spent[item.card])||0)-(Number(item.amount)||0));
+      if(type==='income' && item.card) data.cash[item.card]=Math.max(0,(Number(data.cash[item.card])||0)-(Number(item.amount)||0));
       arr.splice(i,1);save();renderMoney();
     };
     container.appendChild(row);
@@ -605,6 +649,10 @@ function refreshCounts(){
 function renderMoney(){
   document.getElementById('limit-t').value = data.limits.t || '';
   document.getElementById('limit-s').value = data.limits.s || '';
+  ['t','s'].forEach(k=>{
+    const el=document.getElementById('cash-'+k);
+    if(el && document.activeElement!==el) el.value = (Number(data.cash[k])||0) || '';
+  });
   renderMoneyList(data.income, document.getElementById('income-list'),'income',document.getElementById('income-count'));
   renderMoneyList(data.expense, document.getElementById('expense-list'),'expense',document.getElementById('expense-count'));
   renderDeposit();
@@ -747,6 +795,8 @@ function addCat(id,input){
 }
 let pickedCard = 't';
 let pickedPayCard = 't';
+let pickedCashCard = 't';
+let pickedIncomeCard = 't';
 let pickedCat = 'shopping';
 
 function addMoney(type){
@@ -756,7 +806,8 @@ function addMoney(type){
   const amount=parseInt((amt.value||'').replace(/\D/g,''),10);
   if(!label && !amount)return;
   if(type==='income'){
-    data.income.push({label:label||'Доход', amount:amount||0});
+    data.income.push({label:label||'Доход', amount:amount||0, card:pickedIncomeCard});
+    data.cash[pickedIncomeCard]=(Number(data.cash[pickedIncomeCard])||0)+(amount||0); // доход зачисляется на карту
   }else{
     data.expense.push({label:label||'Трата', amount:amount||0, card:pickedCard, cat:pickedCat});
     data.spent[pickedCard]=(Number(data.spent[pickedCard])||0)+(amount||0); // трата добавляется к потраченному
@@ -770,6 +821,14 @@ function addDeposit(){   // пополнить вклад
   if(!amount)return;
   data.deposit=(Number(data.deposit)||0)+amount;
   data.transfers.unshift({dir:'in', amount});
+  amt.value='';save();renderMoney();
+}
+
+function addCashIn(){   // пополнить карту (деньги на карте)
+  const amt=document.getElementById('cashin-amount');
+  const amount=parseInt((amt.value||'').replace(/\D/g,''),10);
+  if(!amount)return;
+  data.cash[pickedCashCard]=(Number(data.cash[pickedCashCard])||0)+amount;
   amt.value='';save();renderMoney();
 }
 
@@ -817,6 +876,7 @@ document.querySelectorAll('[data-add]').forEach(btn=>{
   btn.onclick=()=>{
     if(t==='main') addTask(data.main, document.getElementById('main-input'), ()=>{renderList(data.main,document.getElementById('main-list'),document.getElementById('main-count'));});
     else if(t==='depin') addDeposit();
+    else if(t==='cashin') addCashIn();
     else if(t==='transfer') doTransfer();
     else if(t==='goal') addGoal();
     else addMoney(t);
@@ -827,6 +887,7 @@ document.getElementById('main-input').onkeydown=e=>{if(e.key==='Enter')document.
   document.getElementById(t+'-amount').onkeydown=e=>{if(e.key==='Enter')addMoney(t);};
 });
 document.getElementById('depin-amount').onkeydown=e=>{if(e.key==='Enter')addDeposit();};
+document.getElementById('cashin-amount').onkeydown=e=>{if(e.key==='Enter')addCashIn();};
 document.getElementById('transfer-amount').onkeydown=e=>{if(e.key==='Enter')doTransfer();};
 document.getElementById('goal-target').onkeydown=e=>{if(e.key==='Enter')addGoal();};
 
@@ -836,6 +897,13 @@ document.getElementById('goal-target').onkeydown=e=>{if(e.key==='Enter')addGoal(
   el.oninput=()=>{el.value=el.value.replace(/\D/g,'');data.deposit=Number(el.value)||0;save();};
   el.onblur=()=>{data.deposit=Number(el.value)||0;save();renderMoney();};
 })();
+
+/* редактирование «денег на карте» */
+['t','s'].forEach(k=>{
+  const el=document.getElementById('cash-'+k);
+  el.oninput=()=>{el.value=el.value.replace(/\D/g,'');data.cash[k]=Number(el.value)||0;save();};
+  el.onblur=()=>{data.cash[k]=Number(el.value)||0;save();renderMoney();};
+});
 
 /* редактирование лимита карт */
 ['t','s'].forEach(k=>{
@@ -874,6 +942,22 @@ document.querySelectorAll('.pickbtn[data-pay]').forEach(b=>{
   b.onclick=()=>{
     pickedPayCard=b.dataset.pay;
     document.querySelectorAll('.pickbtn[data-pay]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  };
+});
+/* выбор карты для пополнения (деньги на карте) */
+document.querySelectorAll('.pickbtn[data-cash]').forEach(b=>{
+  b.onclick=()=>{
+    pickedCashCard=b.dataset.cash;
+    document.querySelectorAll('.pickbtn[data-cash]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  };
+});
+/* выбор карты для зачисления дохода */
+document.querySelectorAll('.pickbtn[data-inc]').forEach(b=>{
+  b.onclick=()=>{
+    pickedIncomeCard=b.dataset.inc;
+    document.querySelectorAll('.pickbtn[data-inc]').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
   };
 });
